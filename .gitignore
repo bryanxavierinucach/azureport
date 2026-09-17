@@ -13,3 +13,4 @@ node_modules/
 dist/
 .netlify/
 .vinext/
+next-env.d.ts
