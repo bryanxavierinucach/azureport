@@ -1,7 +1,8 @@
 [build]
   command = "pnpm run build:netlify"
+  publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "24"
+  NODE_VERSION = "22"
   PNPM_VERSION = "11.24.0"
   NITRO_PRESET = "netlify"

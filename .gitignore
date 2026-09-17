@@ -1,0 +1,15 @@
+node_modules/
+.pnpm-store/
+
+# Local environment variables and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Build output
+.next/
+.output/
+dist/
+.netlify/
+.vinext/
