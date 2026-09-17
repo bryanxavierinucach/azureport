@@ -32,8 +32,19 @@ export async function GET() {
       { headers: headers(azure.token), cache: 'no-store' },
     );
     if (!response.ok) {
+      const body = await response.text();
+      let azureMessage = '';
+      try {
+        azureMessage = (JSON.parse(body) as { message?: string }).message?.trim() ?? '';
+      } catch {
+        // Azure can return an empty or non-JSON response.
+      }
       return NextResponse.json(
-        { error: `No se pudieron listar los usuarios (${response.status}). El PAT necesita el permiso Graph: Read.` },
+        {
+          error: azureMessage
+            ? `No se pudieron listar los usuarios (${response.status}): ${azureMessage}`
+            : `No se pudieron listar los usuarios (${response.status}). Revisa la organización y el PAT configurados.`,
+        },
         { status: response.status },
       );
     }
