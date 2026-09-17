@@ -10,18 +10,24 @@ type TypeFilter = 'Todos' | 'HU' | 'Feature' | 'Task';
 type Toast = { kind:'success'|'error'; message:string };
 type AzureUser = { id:string; displayName:string; identity:string };
 
+const APP_TIME_ZONE='America/Guayaquil';
+
 const initialTasks: Task[] = [];
 
 function formatTime(seconds:number) {
   return `${Math.floor(seconds/3600).toString().padStart(2,'0')}:${Math.floor((seconds%3600)/60).toString().padStart(2,'0')}:${Math.floor(seconds%60).toString().padStart(2,'0')}`;
 }
 
+function dateInAppTimeZone(value:Date|string|number=new Date()) {
+  const date=value instanceof Date?value:new Date(value);
+  if(Number.isNaN(date.getTime()))return '';
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:APP_TIME_ZONE,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);
+  const part=(type:Intl.DateTimeFormatPartTypes)=>parts.find(item=>item.type===type)?.value??'';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
 function localDateToday() {
-  const now=new Date();
-  const year=now.getFullYear();
-  const month=String(now.getMonth()+1).padStart(2,'0');
-  const day=String(now.getDate()).padStart(2,'0');
-  return `${year}-${month}-${day}`;
+  return dateInAppTimeZone();
 }
 
 function category(type:string): Exclude<TypeFilter,'Todos'> | 'Otro' {
@@ -73,7 +79,7 @@ export default function TaskBoard() {
     return allTasks.filter(task=>{
       const matchesProject=projectFilter==='Todos'||task.project.trim()===projectFilter;
       const matchesType=typeFilter==='Todos'||category(task.type)===typeFilter;
-      const itemDate=task.createdDate?.slice(0,10)??'';
+      const itemDate=task.createdDate?dateInAppTimeZone(task.createdDate):'';
       const matchesFrom=!dateFrom||Boolean(itemDate&&itemDate>=dateFrom);
       const matchesTo=!dateTo||Boolean(itemDate&&itemDate<=dateTo);
       const matchesSearch=!query||task.title.toLocaleLowerCase().includes(query)||String(task.id).includes(query);
