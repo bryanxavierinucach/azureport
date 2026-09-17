@@ -12,12 +12,17 @@ function headers(token: string, contentType = 'application/json') {
   return { Authorization: `Basic ${btoa(`:${token}`)}`, 'Content-Type': contentType };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const azure = config();
   if (!azure) return NextResponse.json({ configured: false, tasks: [] });
+  const assignedTo = request.nextUrl.searchParams.get('assignedTo')?.trim();
+  if (!assignedTo || assignedTo.length > 320) {
+    return NextResponse.json({ error: 'Selecciona el usuario cuyas tareas quieres consultar.' }, { status: 400 });
+  }
+  const assignedToWiql = assignedTo.replaceAll("'", "''");
   const base = `https://dev.azure.com/${encodeURIComponent(azure.org)}`;
-  const wiql = { query: "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.State] NOT IN ('Closed', 'Cerrado', 'Removed') ORDER BY [System.ChangedDate] DESC" };
-  const hierarchyWiql = { query: "SELECT [System.Id] FROM WorkItemLinks WHERE ([Source].[System.AssignedTo] = @Me) AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward') MODE (Recursive)" };
+  const wiql = { query: `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = '${assignedToWiql}' AND [System.State] NOT IN ('Closed', 'Cerrado', 'Removed') ORDER BY [System.ChangedDate] DESC` };
+  const hierarchyWiql = { query: `SELECT [System.Id] FROM WorkItemLinks WHERE ([Source].[System.AssignedTo] = '${assignedToWiql}') AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward') MODE (Recursive)` };
   const fields = ['System.Id','System.Title','System.WorkItemType','System.State','System.AssignedTo','System.TeamProject','System.CreatedDate','System.ChangedDate','Microsoft.VSTS.Scheduling.Effort','Microsoft.VSTS.Scheduling.OriginalEstimate','Microsoft.VSTS.Scheduling.CompletedWork'];
   const projectsResponse = await fetch(`${base}/_apis/projects?$top=1000&stateFilter=wellFormed&api-version=7.1`, { headers: headers(azure.token), cache: 'no-store' });
   if (!projectsResponse.ok) return NextResponse.json({ error: `No se pudieron listar los proyectos de Azure DevOps (${projectsResponse.status}). Revisa el token y sus permisos.` }, { status: projectsResponse.status });
@@ -44,7 +49,7 @@ export async function GET() {
   const itemsWithDuplicates = results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
   const items = Array.from(new Map(itemsWithDuplicates.map(item => [item.id, item])).values());
   const failedProjects = results.filter(result => result.status === 'rejected').length;
-  return NextResponse.json({ configured: true, projectCount: projects.length, failedProjects, tasks: items.map(item => ({
+  return NextResponse.json({ configured: true, selectedUser: assignedTo, projectCount: projects.length, failedProjects, tasks: items.map(item => ({
     id: item.id,
     type: item.fields['System.WorkItemType'] ?? 'Task',
     title: item.fields['System.Title'] ?? `Tarea ${item.id}`,

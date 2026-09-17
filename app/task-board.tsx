@@ -8,12 +8,9 @@ type Task = {
 };
 type TypeFilter = 'Todos' | 'HU' | 'Feature' | 'Task';
 type Toast = { kind:'success'|'error'; message:string };
+type AzureUser = { id:string; displayName:string; identity:string };
 
-const initialTasks: Task[] = [
-  { id:4821,type:'User Story',title:'Flujo de aprobación de facturas',project:'Portal Financiero',state:'Active',assignedTo:'Bryan Inuca',elapsed:5250,today:5250,effortHours:8,originalEstimate:8,completedHours:2 },
-  { id:4817,type:'Task',title:'Validar permisos por rol',project:'Portal Financiero',state:'New',assignedTo:'Bryan Inuca',elapsed:7800,today:0,effortHours:5,originalEstimate:5,completedHours:0 },
-  { id:4792,type:'Feature',title:'Módulo de conciliación bancaria',project:'Core API',state:'Active',assignedTo:'Bryan Inuca',elapsed:13500,today:3600,effortHours:16,originalEstimate:16,completedHours:4 },
-];
+const initialTasks: Task[] = [];
 
 function formatTime(seconds:number) {
   return `${Math.floor(seconds/3600).toString().padStart(2,'0')}:${Math.floor((seconds%3600)/60).toString().padStart(2,'0')}:${Math.floor(seconds%60).toString().padStart(2,'0')}`;
@@ -37,10 +34,10 @@ function category(type:string): Exclude<TypeFilter,'Todos'> | 'Otro' {
 
 export default function TaskBoard() {
   const [allTasks,setAllTasks]=useState<Task[]>(initialTasks);
-  const [activeId,setActiveId]=useState<number|null>(4821);
+  const [activeId,setActiveId]=useState<number|null>(null);
   const [pausedId,setPausedId]=useState<number|null>(null);
   const [syncing,setSyncing]=useState(false);
-  const [notice,setNotice]=useState('Modo demostración · sincroniza para cargar Azure DevOps');
+  const [notice,setNotice]=useState('Elige un usuario para cargar sus tareas de Azure DevOps');
   const [projectFilter,setProjectFilter]=useState('Todos');
   const [typeFilter,setTypeFilter]=useState<TypeFilter>('Todos');
   const [search,setSearch]=useState('');
@@ -48,6 +45,10 @@ export default function TaskBoard() {
   const [dateFrom,setDateFrom]=useState('');
   const [dateTo,setDateTo]=useState('');
   const [toast,setToast]=useState<Toast|null>(null);
+  const [users,setUsers]=useState<AzureUser[]>([]);
+  const [selectedUser,setSelectedUser]=useState<AzureUser|null>(null);
+  const [userPickerOpen,setUserPickerOpen]=useState(false);
+  const [loadingUsers,setLoadingUsers]=useState(false);
 
   function applyTypeFilter(nextFilter:TypeFilter) {
     setTypeFilter(nextFilter);
@@ -107,16 +108,34 @@ export default function TaskBoard() {
     }
   }
 
-  async function sync(){
+  async function openUserPicker(){
+    setUserPickerOpen(true);
+    if(users.length||loadingUsers)return;
+    setLoadingUsers(true);
+    try {
+      const response=await fetch('/api/users',{cache:'no-store'});
+      const data=await response.json() as {configured?:boolean;users?:AzureUser[];error?:string};
+      if(!response.ok)throw new Error(data.error??'No se pudieron cargar los usuarios');
+      if(!data.configured)throw new Error('Falta configurar Azure DevOps');
+      setUsers(data.users??[]);
+    } catch(error) {
+      setToast({kind:'error',message:error instanceof Error?error.message:'No se pudieron cargar los usuarios'});
+      setUserPickerOpen(false);
+    } finally {setLoadingUsers(false)}
+  }
+
+  async function sync(user=selectedUser){
+    if(!user){await openUserPicker();return}
     setSyncing(true);
     try {
-      const response=await fetch('/api/tasks');
+      const response=await fetch(`/api/tasks?assignedTo=${encodeURIComponent(user.identity)}`,{cache:'no-store'});
       const data=await response.json() as {configured?:boolean;tasks?:Task[];projectCount?:number;failedProjects?:number;error?:string};
       if(!response.ok) throw new Error(data.error);
       if(data.configured){
         const today=localDateToday();
         setAllTasks(data.tasks??[]); setActiveId(null); setProjectFilter('Todos'); setTypeFilter('Todos'); setSearch(''); setDateFrom(today); setDateTo(today);
-        setNotice(`${data.tasks?.length??0} elementos sincronizados · mostrando creados hoy (${today})`);
+        setSelectedUser(user);
+        setNotice(`${data.tasks?.length??0} elementos de ${user.displayName} · mostrando creados hoy (${today})`);
       } else setNotice('Falta configurar la organización y el token de Azure DevOps');
     } catch(error){setNotice(error instanceof Error?error.message:'No se pudo sincronizar')} finally {setSyncing(false)}
   }
@@ -155,7 +174,8 @@ export default function TaskBoard() {
     {toast&&<div role="status" aria-live="polite" className={`fixed right-5 top-5 z-50 flex max-w-md items-start gap-3 rounded-xl border px-4 py-3 text-sm font-semibold shadow-[0_14px_40px_rgba(15,30,53,.2)] ${toast.kind==='success'?'border-emerald-200 bg-emerald-50 text-emerald-800':'border-red-200 bg-red-50 text-red-800'}`}><span aria-hidden="true" className="text-lg">{toast.kind==='success'?'✓':'!'}</span><span>{toast.message}</span><button type="button" onClick={()=>setToast(null)} aria-label="Cerrar notificación" className="ml-2 text-current opacity-60 hover:opacity-100">×</button></div>}
     <header className="border-b border-[#dbe2ec] bg-[#0f1e35] text-white"><div className="mx-auto flex max-w-[1500px] items-center justify-between px-5 py-4 lg:px-8"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#2388ff] font-bold">AT</span><div><p className="font-bold">Azure Time</p><p className="text-xs text-slate-400">Control de trabajo</p></div></div><span className="grid h-9 w-9 place-items-center rounded-full bg-[#d9e8ff] text-sm font-bold text-[#1759a7]">BI</span></div></header>
     <section className="mx-auto max-w-[1500px] px-5 py-7 lg:px-8">
-      <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-1 text-sm font-semibold text-[#2388ff]">MI TRABAJO</p><h1 className="text-3xl font-bold tracking-tight">Tareas de Azure DevOps</h1><p className="mt-1 text-sm text-slate-500">{visibleTasks.length} visibles de {allTasks.length} elementos asignados</p></div><button onClick={sync} disabled={syncing} className="rounded-xl bg-[#1676e8] px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{syncing?'Sincronizando…':'↻ Sincronizar tareas'}</button></div>
+      {userPickerOpen&&<UserPicker users={users} selectedUser={selectedUser} loading={loadingUsers} syncing={syncing} onClose={()=>setUserPickerOpen(false)} onSelect={user=>{setSelectedUser(user);setUserPickerOpen(false);void sync(user)}}/>}
+      <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-1 text-sm font-semibold text-[#2388ff]">CONTROL DE HORAS</p><h1 className="text-3xl font-bold tracking-tight">Tareas de Azure DevOps</h1><p className="mt-1 text-sm text-slate-500">{selectedUser?`Usuario: ${selectedUser.displayName} · `:''}{visibleTasks.length} visibles de {allTasks.length} elementos asignados</p></div><button onClick={()=>void openUserPicker()} disabled={syncing||loadingUsers} className="rounded-xl bg-[#1676e8] px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{syncing?'Sincronizando…':loadingUsers?'Cargando usuarios…':'↻ Elegir usuario y sincronizar'}</button></div>
       <div className="mb-6 grid gap-4 md:grid-cols-2"><Summary label="TIEMPO DE HOY" value={formatTime(completedSecondsVisible)} note={`Suma de Completed Hours · ${visibleTasks.length} elementos visibles`} tone="blue"/><Summary label="TAREAS ACTIVAS" value={String(visibleTasks.filter(t=>['active','activa','activo'].includes(t.state.toLocaleLowerCase())).length)} note={`${counts.Task} tareas encontradas`} tone="green"/></div>
       <div className="overflow-hidden rounded-2xl border border-[#dce3ec] bg-white shadow-[0_8px_30px_rgba(28,46,74,.06)]">
         <div className="grid gap-3 border-b border-[#e6ebf1] p-5 lg:grid-cols-[minmax(220px,1fr)_auto_minmax(220px,1fr)] lg:items-center">
@@ -213,6 +233,22 @@ function TaskRow({task,isActive,isPaused,onPlay,onPause,onStop,onStateChange,onA
     <p className={`font-mono text-lg font-bold ${isActive?'text-[#1477e6]':'text-[#26364f]'}`}>{formatTime(task.today)}</p>
     <div className="flex items-center gap-2"><button type="button" onClick={()=>onPlay(task)} disabled={isActive} aria-label={`Iniciar ${task.title}`} className="grid h-10 w-10 place-items-center rounded-lg bg-[#1676e8] text-white disabled:bg-[#d6e4f5]">▶</button><button type="button" onClick={()=>onPause(task)} disabled={!isActive} aria-label={`Pausar ${task.title}`} className="grid h-10 w-10 place-items-center rounded-lg border border-[#cfd8e5] disabled:opacity-35">Ⅱ</button><button type="button" onClick={()=>onStop(task)} disabled={!isActive&&!isPaused} aria-label={`Detener ${task.title}`} className="grid h-10 w-10 place-items-center rounded-lg border border-[#cfd8e5] text-red-500 disabled:opacity-35">■</button></div>
   </article>;
+}
+
+function UserPicker({users,selectedUser,loading,syncing,onClose,onSelect}:{users:AzureUser[];selectedUser:AzureUser|null;loading:boolean;syncing:boolean;onClose:()=>void;onSelect:(user:AzureUser)=>void}) {
+  const [query,setQuery]=useState('');
+  const filtered=users.filter(user=>`${user.displayName} ${user.identity}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  return <div className="fixed inset-0 z-40 grid place-items-center bg-[#07101f]/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="user-picker-title">
+    <div className="flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-6"><div><p className="text-xs font-bold uppercase tracking-wider text-[#2388ff]">Azure DevOps</p><h2 id="user-picker-title" className="mt-1 text-2xl font-bold">¿De quién quieres traer las tareas?</h2><p className="mt-2 text-sm text-slate-500">Selecciona un integrante antes de sincronizar sus tareas y horas.</p></div><button type="button" onClick={onClose} aria-label="Cerrar" className="text-2xl text-slate-400">×</button></div>
+      <div className="border-b border-slate-200 p-4"><input autoFocus aria-label="Buscar usuario" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar por nombre o correo…" className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"/></div>
+      <div className="min-h-48 overflow-y-auto p-3">
+        {loading&&<p className="p-8 text-center text-sm font-semibold text-slate-500">Cargando usuarios…</p>}
+        {!loading&&filtered.map(user=><button type="button" key={user.id||user.identity} disabled={syncing} onClick={()=>onSelect(user)} className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left hover:bg-blue-50 disabled:opacity-50 ${selectedUser?.identity===user.identity?'bg-blue-50 ring-1 ring-blue-200':''}`}><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#d9e8ff] text-sm font-bold text-[#1759a7]">{user.displayName.split(/\s+/).slice(0,2).map(part=>part[0]).join('').toLocaleUpperCase()}</span><span className="min-w-0"><span className="block truncate text-sm font-bold text-slate-800">{user.displayName}</span><span className="block truncate text-xs text-slate-500">{user.identity}</span></span></button>)}
+        {!loading&&!filtered.length&&<p className="p-8 text-center text-sm text-slate-500">No se encontraron usuarios.</p>}
+      </div>
+    </div>
+  </div>;
 }
 
 function Summary({label,value,note,tone}:{label:string;value:string;note:string;tone:'blue'|'navy'|'green'}){const colors={blue:'border-l-[#2388ff]',navy:'border-l-[#243c60]',green:'border-l-[#1eaa74]'};return <div className={`rounded-xl border border-[#dce3ec] border-l-4 bg-white px-5 py-4 ${colors[tone]}`}><p className="text-[11px] font-bold tracking-wider text-slate-400">{label}</p><p className="mt-1 font-mono text-2xl font-bold">{value}</p><p className="mt-1 text-xs text-slate-500">{note}</p></div>}
