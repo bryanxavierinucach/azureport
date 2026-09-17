@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { isAuthenticated } from '../../auth';
+import { azureConfig } from '../azure-config';
 
 type GraphUser = {
   descriptor?: string;
@@ -8,18 +10,13 @@ type GraphUser = {
   isDeletedInOrigin?: boolean;
 };
 
-function config() {
-  const org = process.env.AZURE_DEVOPS_ORG;
-  const token = process.env.AZURE_DEVOPS_PAT;
-  return org && token ? { org, token } : null;
-}
-
 function headers(token: string) {
   return { Authorization: `Basic ${btoa(`:${token}`)}` };
 }
 
 export async function GET() {
-  const azure = config();
+  if (!(await isAuthenticated())) return NextResponse.json({ error: 'Sesión no válida.' }, { status: 401 });
+  const azure = azureConfig();
   if (!azure) return NextResponse.json({ configured: false, users: [] });
 
   const users: GraphUser[] = [];

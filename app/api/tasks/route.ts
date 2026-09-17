@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-type AzureConfig = { org: string; token: string };
-
-function config(): AzureConfig | null {
-  const org = process.env.AZURE_DEVOPS_ORG;
-  const token = process.env.AZURE_DEVOPS_PAT;
-  return org && token ? { org, token } : null;
-}
+import { isAuthenticated } from '../../auth';
+import { azureConfig } from '../azure-config';
 
 function headers(token: string, contentType = 'application/json') {
   return { Authorization: `Basic ${btoa(`:${token}`)}`, 'Content-Type': contentType };
 }
 
 export async function GET(request: NextRequest) {
-  const azure = config();
+  if (!(await isAuthenticated())) return NextResponse.json({ error: 'Sesión no válida.' }, { status: 401 });
+  const azure = azureConfig();
   if (!azure) return NextResponse.json({ configured: false, tasks: [] });
   const assignedTo = request.nextUrl.searchParams.get('assignedTo')?.trim();
   if (!assignedTo || assignedTo.length > 320) {
@@ -66,7 +61,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const azure = config();
+  if (!(await isAuthenticated())) return NextResponse.json({ error: 'Sesión no válida.' }, { status: 401 });
+  const azure = azureConfig();
   if (!azure) return NextResponse.json({ error: 'Configura Azure DevOps antes de editar tareas.' }, { status: 503 });
   const body = await request.json() as { id?: number; project?: string; state?: string; assignedTo?: string; originalEstimate?: number; completedHours?: number };
   const hasOriginalEstimate = typeof body.originalEstimate === 'number' && Number.isFinite(body.originalEstimate);

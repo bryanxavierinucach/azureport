@@ -56,6 +56,11 @@ export default function TaskBoard() {
   const [userPickerOpen,setUserPickerOpen]=useState(false);
   const [loadingUsers,setLoadingUsers]=useState(false);
 
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.assign('/login');
+  }
+
   function applyTypeFilter(nextFilter:TypeFilter) {
     setTypeFilter(nextFilter);
     setDisplayLimit(150);
@@ -178,7 +183,7 @@ export default function TaskBoard() {
 
   return <main className="min-h-screen bg-[#f3f6fa] text-[#172033]">
     {toast&&<div role="status" aria-live="polite" className={`fixed right-5 top-5 z-50 flex max-w-md items-start gap-3 rounded-xl border px-4 py-3 text-sm font-semibold shadow-[0_14px_40px_rgba(15,30,53,.2)] ${toast.kind==='success'?'border-emerald-200 bg-emerald-50 text-emerald-800':'border-red-200 bg-red-50 text-red-800'}`}><span aria-hidden="true" className="text-lg">{toast.kind==='success'?'✓':'!'}</span><span>{toast.message}</span><button type="button" onClick={()=>setToast(null)} aria-label="Cerrar notificación" className="ml-2 text-current opacity-60 hover:opacity-100">×</button></div>}
-    <header className="border-b border-[#dbe2ec] bg-[#0f1e35] text-white"><div className="mx-auto flex max-w-[1500px] items-center justify-between px-5 py-4 lg:px-8"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#2388ff] font-bold">AT</span><div><p className="font-bold">Azure Time</p><p className="text-xs text-slate-400">Control de trabajo</p></div></div><span className="grid h-9 w-9 place-items-center rounded-full bg-[#d9e8ff] text-sm font-bold text-[#1759a7]">BI</span></div></header>
+    <header className="border-b border-[#dbe2ec] bg-[#0f1e35] text-white"><div className="mx-auto flex max-w-[1500px] items-center justify-between px-5 py-4 lg:px-8"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#2388ff] font-bold">AT</span><div><p className="font-bold">Azure Time</p><p className="text-xs text-slate-400">Control de trabajo</p></div></div><button type="button" onClick={()=>void logout()} className="rounded-lg border border-slate-600 px-4 py-2 text-sm font-bold text-slate-200 hover:border-slate-400 hover:bg-white/10">Cerrar sesión</button></div></header>
     <section className="mx-auto max-w-[1500px] px-5 py-7 lg:px-8">
       {userPickerOpen&&<UserPicker users={users} selectedUser={selectedUser} loading={loadingUsers} syncing={syncing} onClose={()=>setUserPickerOpen(false)} onSelect={user=>{setSelectedUser(user);setUserPickerOpen(false);void sync(user)}}/>}
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-1 text-sm font-semibold text-[#2388ff]">CONTROL DE HORAS</p><h1 className="text-3xl font-bold tracking-tight">Tareas de Azure DevOps</h1><p className="mt-1 text-sm text-slate-500">{selectedUser?`Usuario: ${selectedUser.displayName} · `:''}{visibleTasks.length} visibles de {allTasks.length} elementos asignados</p></div><button onClick={()=>void openUserPicker()} disabled={syncing||loadingUsers} className="rounded-xl bg-[#1676e8] px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{syncing?'Sincronizando…':loadingUsers?'Cargando usuarios…':'↻ Elegir usuario y sincronizar'}</button></div>
